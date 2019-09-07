@@ -14,6 +14,8 @@ class Frame():
 
         if self.eth.proto_code == "0x0806":
             self.addtype("arp", ARPFrame(self.eth.payload))
+        elif self.eth.proto_code == "0x0800":
+            self.addtype("ip", ARPFrame(self.eth.payload))
 
     def pretty(self):
         pretty_strings = []
@@ -28,6 +30,16 @@ class Frame():
         self.type = type_name
 
 
+def decodeMac(mac_binary):
+    return "%02X:%02X:%02X:%02X:%02X:%02X" % unpackBinary(mac_binary)
+
+def unpackBinary(data):
+    unpack_string = ""
+    for byte in data:
+        unpack_string += "B"
+    return struct.unpack(unpack_string, data)
+
+
 class BaseFrame():
     def __init__(self, raw_buffer=None):
         if raw_buffer:
@@ -40,7 +52,6 @@ class BaseFrame():
     def pretty(self):
         return vars(self)
 
-
 class EthFrame(BaseFrame):
     def parse(self, raw_buffer):
         self.dst_mac_raw = raw_buffer[  :6]
@@ -50,12 +61,12 @@ class EthFrame(BaseFrame):
 
     def humanReadable(self):
         # human readable IP addresses 
-        self.src_mac = "%02X:%02X:%02X:%02X:%02X:%02X" % struct.unpack('BBBBBB', self.src_mac_raw)
-        self.dst_mac = "%02X:%02X:%02X:%02X:%02X:%02X" % struct.unpack('BBBBBB', self.dst_mac_raw)
-        self.proto_code = "0x%02X%02X" % struct.unpack('BB', self.type_raw)
+        self.src_mac = decodeMac(self.src_mac_raw)
+        self.dst_mac = decodeMac(self.dst_mac_raw)
+        self.proto_code = "0x%02X%02X" % unpackBinary(self.type_raw)
 
         # human readable protocol
-        protocol_map = {'0x0806':"ARP"}
+        protocol_map = {'0x0806':"ARP", "0x0800":"IP"}
         if self.proto_code in protocol_map:
             self.proto = protocol_map[self.proto_code]
         else:
@@ -63,7 +74,6 @@ class EthFrame(BaseFrame):
 
     def pretty(self):
         return "[ETH] Protocol: %s (%s) -> (%s)" % (self.proto, self.src_mac, self.dst_mac)
-
 
 class ARPFrame(BaseFrame):
     def parse(self, raw_buffer):
@@ -80,8 +90,8 @@ class ARPFrame(BaseFrame):
     def humanReadable(self):
         self.opcode = int.from_bytes(self.op, byteorder='big', signed=False)
 
-        self.sender_mac = "%02X:%02X:%02X:%02X:%02X:%02X" % struct.unpack('BBBBBB', self.sender_hw_addr)
-        self.target_mac = "%02X:%02X:%02X:%02X:%02X:%02X" % struct.unpack('BBBBBB', self.target_hw_addr)
+        self.sender_mac = decodeMac(self.sender_hw_addr)
+        self.target_mac = decodeMac(self.target_hw_addr)
 
         self.sender_ip = socket.inet_ntoa(self.sender_ip_addr)
         self.target_ip = socket.inet_ntoa(self.target_ip_addr)
@@ -100,6 +110,37 @@ class ARPFrame(BaseFrame):
             pretty_string += "%s is at %s -> %s (%s)" % (self.sender_ip, self.sender_mac, self.target_ip, self.target_mac)
         return pretty_string
         
+class IPFrame(BaseFrame):
+    def parse(self, raw_buffer):
+        self.v_hl          = raw_buffer[ :1]
+        self.stype         = raw_buffer[1:2]
+        self.l             = raw_buffer[2:4]
+        self.id            = raw_buffer[4:6]
+        self.flags_foffset = raw_buffer[6:8]
+        self.ttl           = raw_buffer[8:9]
+        self.proto_raw     = raw_buffer[9:10]
+        self.chksum        = raw_buffer[10:12]
+        self.src_ip_raw    = raw_buffer[12:16]
+        self.dst_ip_raw    = raw_buffer[16:20]
+        self.opts          = raw_buffer[20:23]
+        self.pad           = raw_buffer[23:24]
+    def humanReadable(self):
+        pass
+    def pretty(self):
+        return vars(self)
+
+class ICMPFrame(BaseFrame):
+    def parse(self, raw_buffer):
+        self.type   = raw_buffer[ :1]
+        self.code   = raw_buffer[1:2]
+        self.chksum = raw_buffer[2:4]
+        self.id     = raw_buffer[4:6]
+        self.sid    = raw_buffer[6:8]
+        self.data   = raw_buffer[8:]
+    def humanReadable(self):
+        pass
+    def pretty(self):
+        return vars(self)
 
 device = "eth0"
 packet_count = 10;
