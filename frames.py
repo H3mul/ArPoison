@@ -32,6 +32,9 @@ class Frame():
         self.type = type_name
 
 
+# Helper functions
+#-----------------
+
 def decodeMac(mac_binary):
     return "%02X:%02X:%02X:%02X:%02X:%02X" % unpackBinary(mac_binary)
 
@@ -42,13 +45,18 @@ def unpackBinary(data):
     return struct.unpack(unpack_string, data)
 
 
+# Frames
+#-----------------
+
 class BaseFrame():
     def __init__(self, raw_buffer=None):
         if raw_buffer:
             self.parse(raw_buffer)
             self.humanReadable()
+
     def parse(self, raw_buffer):
        raise Exception("Must implement parsing")
+
     def splitBytes(self, raw_buffer, att_names, boundaries):
         if len(boundaries) < len(att_names) or len(boundaries) > len(att_names)+1:
             raise Exception("Incorrectly assembled name and boundary sequence")
@@ -63,8 +71,10 @@ class BaseFrame():
 
     def humanReadable(self):
         pass
+
     def pretty(self):
         return str(vars(self))
+
 
 class EthFrame(BaseFrame):
     def parse(self, raw_buffer):
@@ -125,12 +135,15 @@ class ARPFrame(BaseFrame):
             pretty_string += "%s is at %s -> %s (%s)" % (self.sender_ip, self.sender_mac, self.target_ip, self.target_mac)
         return pretty_string
 
+
 class IPFrame(BaseFrame):
+
     def parse(self, raw_buffer):
         att_names = ['v_hl','stype','l','id','flags_foffset','ttl',
                     'proto_raw','chksum','src_ip_raw','dst_ip_raw','payload']
         boundaries = [0,1,2,4,6,8,9,10,12,16,20]
         self.splitBytes(raw_buffer, att_names, boundaries)
+
     def humanReadable(self):
         self.src_ip = socket.inet_ntoa(self.src_ip_raw)
         self.dst_ip = socket.inet_ntoa(self.dst_ip_raw)
@@ -138,17 +151,21 @@ class IPFrame(BaseFrame):
 
         self.proto_map = {1:'icmp'}
         self.proto = self.proto_map[self.proto_code] if (self.proto_code in self.proto_map) else self.proto_code
+
     def pretty(self):
         pretty_string = "[IP]"
         if self.proto == self.proto_code:
             pretty_string += "[%s]" % (self.proto_code)
         return pretty_string + "\t%s -> %s" % (self.src_ip, self.dst_ip)
 
+
 class ICMPFrame(BaseFrame):
+
     def parse(self, raw_buffer):
-        att_names = ['type_raw','code_raw','chksum','id','sid','data']
-        boundaries = [0,1,2,4,6,8]
+        att_names = ['type_raw','code_raw','chksum','data']
+        boundaries = [0,1,2,4]
         self.splitBytes(raw_buffer, att_names, boundaries)
+
     def humanReadable(self):
         self.type = int.from_bytes(self.type_raw, byteorder='big', signed=False)
         self.code = int.from_bytes(self.code_raw, byteorder='big', signed=False)
@@ -162,6 +179,7 @@ class ICMPFrame(BaseFrame):
             self.message = "Redirect"
         elif self.type == 8:
             self.message = "Echo Request"
+
     def pretty(self):
         pretty_string = "[ICMP]"
         if self.message:
