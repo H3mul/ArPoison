@@ -16,6 +16,8 @@ class Frame():
             self.addtype("arp", ARPFrame(self.eth.payload))
         elif self.eth.proto_code == "0x0800":
             self.addtype("ip", IPFrame(self.eth.payload))
+            if self.ip.proto_code == 1:
+                self.addtype("icmp", ICMPFrame(self.ip.payload))
 
     def pretty(self):
         pretty_strings = []
@@ -126,17 +128,44 @@ class ARPFrame(BaseFrame):
 class IPFrame(BaseFrame):
     def parse(self, raw_buffer):
         att_names = ['v_hl','stype','l','id','flags_foffset','ttl',
-                    'proto_raw','chksum','src_ip_raw','dst_ip_raw','opts','pad']
-        boundaries = [0,1,2,4,6,8,9,10,12,16,20,23,24]
+                    'proto_raw','chksum','src_ip_raw','dst_ip_raw','payload']
+        boundaries = [0,1,2,4,6,8,9,10,12,16,20]
         self.splitBytes(raw_buffer, att_names, boundaries)
     def humanReadable(self):
         self.src_ip = socket.inet_ntoa(self.src_ip_raw)
         self.dst_ip = socket.inet_ntoa(self.dst_ip_raw)
+        self.proto_code = int.from_bytes(self.proto_raw, byteorder='big', signed=False)
+
+        self.proto_map = {1:'icmp'}
+        self.proto = self.proto_map[self.proto_code] if (self.proto_code in self.proto_map) else self.proto_code
     def pretty(self):
-        return "[IP]\t\t%s -> %s" % (self.src_ip, self.dst_ip)
+        pretty_string = "[IP]"
+        if self.proto == self.proto_code:
+            pretty_string += "[%s]" % (self.proto_code)
+        return pretty_string + "\t%s -> %s" % (self.src_ip, self.dst_ip)
 
 class ICMPFrame(BaseFrame):
     def parse(self, raw_buffer):
-        att_names = ['type','code','chksum','id','sid','data']
+        att_names = ['type_raw','code_raw','chksum','id','sid','data']
         boundaries = [0,1,2,4,6,8]
         self.splitBytes(raw_buffer, att_names, boundaries)
+    def humanReadable(self):
+        self.type = int.from_bytes(self.type_raw, byteorder='big', signed=False)
+        self.code = int.from_bytes(self.code_raw, byteorder='big', signed=False)
+        self.message = ""
+
+        if self.type == 0:
+            self.message = "Echo Reply"
+        elif self.type == 3:
+            self.message = "Destination Unreachable"
+        elif self.type == 5:
+            self.message = "Redirect"
+        elif self.type == 8:
+            self.message = "Echo Request"
+    def pretty(self):
+        pretty_string = "[ICMP]"
+        if self.message:
+            pretty_string += "\t%s" % (self.message)
+        else:
+            pretty_string += "\tType:%s Code:%s" % (self.type, self.code)
+        return pretty_string
