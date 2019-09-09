@@ -13,7 +13,7 @@ class Sniffer():
 
     def sniff(self, filter_func=None, packet_count=1):
         while packet_count > 0:
-            raw_frame = self.socket.recvfrom(65565)[0]
+            raw_frame = self.socket.recv(65565)
             frame = frames.Frame(raw_frame)
             if not filter_func or filter_func(frame):
                 packet_count -= 1

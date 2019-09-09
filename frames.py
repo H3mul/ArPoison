@@ -5,8 +5,12 @@ import struct
 # Sequentially peels layers of frames, stores parsed frame types
 # in separate object members.
 class Frame():
-    def __init__(self, raw_buffer=None):
+    def __init__(self, raw_buffer=None, create_type=None):
         if not raw_buffer:
+            if create_type == "arp":
+                self.addtype("eth", EthFrame())
+                self.addtype("arp", ARPFrame())
+            self.assemble()
             return
 
         self.types = []
@@ -18,6 +22,25 @@ class Frame():
             self.addtype("ip", IPFrame(self.eth.payload))
             if self.ip.proto_code == 1:
                 self.addtype("icmp", ICMPFrame(self.ip.payload))
+
+    def process(self):
+        types = self.types[::-1]
+        for frame_type in types:
+            getattr(self, frame_type).process()
+
+        # Set each layer's raw field to previous one's payload
+        for i in range(len(types)-1):
+            getattr(self, types[i]).payload = getattr(self, types[i+1]).raw
+
+    def assemble(self):
+        for frame_type in self.types:
+            getattr(self, frame_type).encodeHumanReadable()
+
+        self.process()
+        return self.raw()
+
+    def raw(self):
+        return getattr(self, self.types[0]).raw
 
     def pretty(self):
         pretty_strings = []
@@ -37,12 +60,14 @@ class Frame():
 
 def decodeMac(mac_binary):
     return "%02X:%02X:%02X:%02X:%02X:%02X" % unpackBinary(mac_binary)
+def encodeMac(mac):
+    return packBinary(mac.lower().split(':'))
 
 def unpackBinary(data):
-    unpack_string = ""
-    for byte in data:
-        unpack_string += "B"
-    return struct.unpack(unpack_string, data)
+    return struct.unpack("B"*len(data), data)
+def packBinary(data):
+    data = [int(byte, 16) for byte in data]
+    return struct.pack("B"*len(data), *data)
 
 
 # Frames
@@ -50,14 +75,21 @@ def unpackBinary(data):
 
 class BaseFrame():
     def __init__(self, raw_buffer=None):
+        self.raw = raw_buffer if raw_buffer else []
+        self.setAttributes()
+        for att in self.att_names:
+            setattr(self, att, None)
         if raw_buffer:
-            self.parse(raw_buffer)
-            self.humanReadable()
-
-    def parse(self, raw_buffer):
+            self.process()
+            self.decodeHumanReadable()
+    def setAttributes(self):
        raise Exception("Must implement parsing")
 
-    def splitBytes(self, raw_buffer, att_names, boundaries):
+    # Synchronize self.raw and raw attributes
+    def process(self, parse=True):
+        raw_buffer = self.raw
+        boundaries = self.boundaries
+        att_names = self.att_names
         if len(boundaries) < len(att_names) or len(boundaries) > len(att_names)+1:
             raise Exception("Incorrectly assembled name and boundary sequence")
 
@@ -67,9 +99,20 @@ class BaseFrame():
         for i in range(0, len(boundaries)-1):
             start = boundaries[i]
             end = boundaries[i+1]
-            setattr(self, att_names[i], raw_buffer[start:end])
+            if raw_buffer:
+                setattr(self, att_names[i], raw_buffer[start:end])
+            else:
+                self.raw[start:end] = getattr(self, att_names[i])
 
-    def humanReadable(self):
+    def assemble(self):
+        self.encodeHumanReadable()
+        self.process()
+        return self.raw
+
+    def decodeHumanReadable(self):
+        pass
+
+    def encodeHumanReadable(self):
         pass
 
     def pretty(self):
@@ -77,27 +120,37 @@ class BaseFrame():
 
 
 class EthFrame(BaseFrame):
-    def parse(self, raw_buffer):
+    def setAttributes(self):
         conf = {
             'dst_mac_raw' : 0,
             'src_mac_raw' : 6,
             'type_raw'    : 12,
             'payload'     : 14
         }
-        self.splitBytes(raw_buffer, list(conf.keys()), list(conf.values()))
+        self.boundaries = list(conf.values())
+        self.att_names = list(conf.keys())
+        self.protocol_map = {'0x0806':"ARP", "0x0800":"IP"}
 
-    def humanReadable(self):
+    def decodeHumanReadable(self):
         # human readable IP addresses
         self.src_mac = decodeMac(self.src_mac_raw)
         self.dst_mac = decodeMac(self.dst_mac_raw)
         self.proto_code = "0x%02X%02X" % unpackBinary(self.type_raw)
 
         # human readable protocol
-        protocol_map = {'0x0806':"ARP", "0x0800":"IP"}
-        if self.proto_code in protocol_map:
-            self.proto = protocol_map[self.proto_code]
+        if self.proto_code in self.protocol_map:
+            self.proto = self.protocol_map[self.proto_code]
         else:
             self.proto = self.proto_code
+
+    def encodeHumanReadable(self):
+        self.dst_mac_raw = encodeMac(self.dst_mac)
+        self.src_mac_raw = encodeMac(self.src_mac)
+
+        proto = self.proto_code
+        if proto.startswith('0x'):
+            proto = proto[2:]
+        self.type_raw = packBinary(proto)
 
     def pretty(self):
         pretty_string = "[ETH]"
@@ -106,13 +159,13 @@ class EthFrame(BaseFrame):
         return pretty_string+"\t(%s) -> (%s)" % (self.src_mac, self.dst_mac)
 
 class ARPFrame(BaseFrame):
-    def parse(self, raw_buffer):
-        att_names = ['hwtype', 'proto_type', 'hlen', 'plen', 'op', 'sender_hw_addr',
+    def setAttributes(self):
+        self.att_names = ['hwtype', 'proto_type', 'hlen', 'plen', 'op', 'sender_hw_addr',
                 'sender_ip_addr', 'target_hw_addr', 'target_ip_addr' ]
-        boundaries = [0,2,4,5,6,8,14,18,24,28]
-        self.splitBytes(raw_buffer, att_names, boundaries)
+        self.boundaries = [0,2,4,5,6,8,14,18,24,28]
+        self.oper_map = {1:'request', 2:'reply'}
 
-    def humanReadable(self):
+    def decodeHumanReadable(self):
         self.opcode = int.from_bytes(self.op, byteorder='big', signed=False)
 
         self.sender_mac = decodeMac(self.sender_hw_addr)
@@ -121,8 +174,16 @@ class ARPFrame(BaseFrame):
         self.sender_ip = socket.inet_ntoa(self.sender_ip_addr)
         self.target_ip = socket.inet_ntoa(self.target_ip_addr)
 
-        self.oper_map = {1:'request', 2:'reply'}
         self.operation = self.oper_map[self.opcode] if (self.opcode in self.oper_map) else self.opcode
+
+    def encodeHumanReadable(self):
+        self.op = bytes([self.opcode])
+
+        self.sender_hw_addr = encodeMac(self.sender_mac)
+        self.target_hw_addr = encodeMac(self.target_mac)
+
+        self.sender_ip_addr = socket.inet_aton(self.sender_ip)
+        self.target_ip_addr = socket.inet_aton(self.target_ip)
 
     def pretty(self):
         pretty_string = "[ARP]\t"
@@ -138,18 +199,17 @@ class ARPFrame(BaseFrame):
 
 class IPFrame(BaseFrame):
 
-    def parse(self, raw_buffer):
-        att_names = ['v_hl','stype','l','id','flags_foffset','ttl',
+    def setAttributes(self):
+        self.att_names = ['v_hl','stype','l','id','flags_foffset','ttl',
                     'proto_raw','chksum','src_ip_raw','dst_ip_raw','payload']
-        boundaries = [0,1,2,4,6,8,9,10,12,16,20]
-        self.splitBytes(raw_buffer, att_names, boundaries)
+        self.boundaries = [0,1,2,4,6,8,9,10,12,16,20]
+        self.proto_map = {1:'icmp'}
 
-    def humanReadable(self):
+    def decodeHumanReadable(self):
         self.src_ip = socket.inet_ntoa(self.src_ip_raw)
         self.dst_ip = socket.inet_ntoa(self.dst_ip_raw)
         self.proto_code = int.from_bytes(self.proto_raw, byteorder='big', signed=False)
 
-        self.proto_map = {1:'icmp'}
         self.proto = self.proto_map[self.proto_code] if (self.proto_code in self.proto_map) else self.proto_code
 
     def pretty(self):
@@ -161,12 +221,11 @@ class IPFrame(BaseFrame):
 
 class ICMPFrame(BaseFrame):
 
-    def parse(self, raw_buffer):
-        att_names = ['type_raw','code_raw','chksum','data']
-        boundaries = [0,1,2,4]
-        self.splitBytes(raw_buffer, att_names, boundaries)
+    def setAttributes(self):
+        self.att_names = ['type_raw','code_raw','chksum','data']
+        self.boundaries = [0,1,2,4]
 
-    def humanReadable(self):
+    def decodeHumanReadable(self):
         self.type = int.from_bytes(self.type_raw, byteorder='big', signed=False)
         self.code = int.from_bytes(self.code_raw, byteorder='big', signed=False)
         self.message = ""

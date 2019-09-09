@@ -25,11 +25,11 @@ def icmpFilter(frame):
     return frame.type == 'icmp'
 
 try:
-    target_ip = '10.0.0.201'
+    #target_ip = '10.0.0.201'
 
-    print(getMac(target_ip))
+    #print(getMac(target_ip))
     sniffer = sniffer.Sniffer(device = 'eth0')
-    for frame in sniffer.sniff(icmpFilter, 2):
+    for frame in sniffer.sniff(arpFilter, 1):
         print(frame.pretty())
         print()
 except KeyboardInterrupt:
