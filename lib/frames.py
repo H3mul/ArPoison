@@ -6,6 +6,7 @@ import struct
 # in separate object members.
 class Frame():
     def __init__(self, raw_buffer=None, create_type=None):
+        self.types = []
         if not raw_buffer:
             if create_type == "arp":
                 self.addtype("eth", EthFrame())
@@ -13,7 +14,6 @@ class Frame():
             self.assemble()
             return
 
-        self.types = []
         self.addtype("eth", EthFrame(raw_buffer))
 
         if self.eth.proto_code == "0x0806":
@@ -75,18 +75,17 @@ def packBinary(data):
 
 class BaseFrame():
     def __init__(self, raw_buffer=None):
-        self.raw = raw_buffer if raw_buffer else []
+        self.raw = raw_buffer if raw_buffer else ""
         self.setAttributes()
         for att in self.att_names:
             setattr(self, att, None)
-        if raw_buffer:
-            self.process()
-            self.decodeHumanReadable()
+        self.process()
+        self.decodeHumanReadable()
     def setAttributes(self):
        raise Exception("Must implement parsing")
 
-    # Synchronize self.raw and raw attributes
-    def process(self, parse=True):
+    # Synchronize self.raw and the split attributes
+    def process(self):
         raw_buffer = self.raw
         boundaries = self.boundaries
         att_names = self.att_names
@@ -102,7 +101,8 @@ class BaseFrame():
             if raw_buffer:
                 setattr(self, att_names[i], raw_buffer[start:end])
             else:
-                self.raw[start:end] = getattr(self, att_names[i])
+                data = getattr(self, att_names[i]) or b'\x00'*(end-start)
+                self.raw[start:end] = data
 
     def assemble(self):
         self.encodeHumanReadable()

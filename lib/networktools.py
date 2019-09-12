@@ -1,4 +1,5 @@
 import sniffer
+import frames
 from utils import *
 
 def ping(host):
@@ -29,7 +30,10 @@ try:
 
     #print(getMac(target_ip))
     sniffer = sniffer.Sniffer(device = 'eth0')
-    for frame in sniffer.sniff(arpFilter, 1):
+    for frame in sniffer.sniff(arpFilter, 2):
+        #frame = frames.Frame(create_type="arp")
+        print(frame.raw())
+        print(frame.arp.raw)
         print(frame.pretty())
         print()
 except KeyboardInterrupt:
