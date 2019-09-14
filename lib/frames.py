@@ -67,7 +67,7 @@ def unpackBinary(data):
     return struct.unpack("B"*len(data), data)
 def packBinary(data):
     data = [int(byte, 16) for byte in data]
-    return struct.pack("B"*len(data), *data)
+    return struct.pack(str(len(data))+"B", *data)
 
 
 # Frames
@@ -75,18 +75,18 @@ def packBinary(data):
 
 class BaseFrame():
     def __init__(self, raw_buffer=None):
-        self.raw = raw_buffer if raw_buffer else ""
+        self.raw = raw_buffer if raw_buffer else b''
         self.setAttributes()
         for att in self.att_names:
             setattr(self, att, None)
-        self.process()
-        self.decodeHumanReadable()
+        if self.raw:
+            self.parse()
     def setAttributes(self):
-       raise Exception("Must implement parsing")
+       raise Exception("Must implement frame attributes")
 
-    # Synchronize self.raw and the split attributes
-    def process(self):
-        raw_buffer = self.raw
+    # parse raw into attrs if parse
+    # assemble raw from attrs otherwise
+    def process(self, parse=True):
         boundaries = self.boundaries
         att_names = self.att_names
         if len(boundaries) < len(att_names) or len(boundaries) > len(att_names)+1:
@@ -98,25 +98,27 @@ class BaseFrame():
         for i in range(0, len(boundaries)-1):
             start = boundaries[i]
             end = boundaries[i+1]
-            if raw_buffer:
-                setattr(self, att_names[i], raw_buffer[start:end])
+            if parse:
+                setattr(self, att_names[i], self.raw[start:end])
             else:
-                data = getattr(self, att_names[i]) or b'\x00'*(end-start)
-                self.raw[start:end] = data
-
+                zeros = struct.pack(str(end-start)+'B', *([0]*(end-start))) 
+                self.raw += getattr(self, att_names[i]) or zeros
     def assemble(self):
-        self.encodeHumanReadable()
-        self.process()
+        self.process(parse=False)
         return self.raw
+
+    def parse(self):
+        self.process()
+        self.decodeHumanReadable()
 
     def decodeHumanReadable(self):
         pass
 
-    def encodeHumanReadable(self):
-        pass
-
     def pretty(self):
         return str(vars(self))
+
+    def getRaw(self):
+        return self.raw
 
 
 class EthFrame(BaseFrame):
@@ -176,15 +178,6 @@ class ARPFrame(BaseFrame):
 
         self.operation = self.oper_map[self.opcode] if (self.opcode in self.oper_map) else self.opcode
 
-    def encodeHumanReadable(self):
-        self.op = bytes([self.opcode])
-
-        self.sender_hw_addr = encodeMac(self.sender_mac)
-        self.target_hw_addr = encodeMac(self.target_mac)
-
-        self.sender_ip_addr = socket.inet_aton(self.sender_ip)
-        self.target_ip_addr = socket.inet_aton(self.target_ip)
-
     def pretty(self):
         pretty_string = "[ARP]\t"
 
@@ -196,6 +189,53 @@ class ARPFrame(BaseFrame):
             pretty_string += "%s is at %s -> %s (%s)" % (self.sender_ip, self.sender_mac, self.target_ip, self.target_mac)
         return pretty_string
 
+    #################################
+
+    def getSenderMac(self):
+        return self.sender_mac;
+    
+    def setSenderMac(self, sender_mac):
+        self.sender_mac = sender_mac
+        self.sender_hw_addr = encodeMac(self.sender_mac)
+        self.assemble()
+
+
+    def getSenderIP(self):
+        return self.sender_ip;
+    
+    def setSenderIP(self, sender_ip):
+        self.sender_ip = sender_ip
+        self.sender_ip_addr = socket.inet_aton(self.sender_ip)
+        self.assemble()
+
+
+    def getTargetMac(self):
+        return self.target_mac;
+    
+    def setTargetMac(self, target_mac):
+        self.target_mac = target_mac
+        self.target_hw_addr = encodeMac(self.target_mac)
+        self.assemble()
+
+
+    def getTargetIP(self):
+        return self.target_ip;
+    
+    def setTargetIP(self, target_ip):
+        self.target_ip = target_ip
+        self.target_ip_addr = socket.inet_aton(self.target_ip)
+        self.assemble()
+
+
+    def getOpCode(self):
+        return self.opcode
+
+    def setOpCode(self, opcode):
+        self.opcode = opcode
+        self.op = bytes([self.opcode])
+        self.assemble()
+
+#####################################
 
 class IPFrame(BaseFrame):
 
