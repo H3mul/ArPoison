@@ -77,8 +77,9 @@ class BaseFrame():
     def __init__(self, raw_buffer=None):
         self.raw = raw_buffer if raw_buffer else b''
         self.setAttributes()
-        for att in self.att_names:
-            setattr(self, att, None)
+        for i, att in enumerate(self.att_names):
+            data = self.defaults[i] if len(self.defaults) > i else None
+            setattr(self, att, data)
         if self.raw:
             self.parse()
     def setAttributes(self):
@@ -105,19 +106,15 @@ class BaseFrame():
                 self.raw += getattr(self, att_names[i]) or zeros
     def assemble(self):
         self.process(parse=False)
-        return self.raw
 
     def parse(self):
         self.process()
-        self.decodeHumanReadable()
-
-    def decodeHumanReadable(self):
-        pass
 
     def pretty(self):
         return str(vars(self))
 
     def getRaw(self):
+        self.assemble()
         return self.raw
 
 
@@ -165,75 +162,70 @@ class ARPFrame(BaseFrame):
         self.att_names = ['hwtype', 'proto_type', 'hlen', 'plen', 'op', 'sender_hw_addr',
                 'sender_ip_addr', 'target_hw_addr', 'target_ip_addr' ]
         self.boundaries = [0,2,4,5,6,8,14,18,24,28]
+        self.defaults = [
+            b'\x00\x01', #hwtype Ethernet
+            b'\x08\x00', #protocol IPV4
+            b'\x06',     #hw addr size
+            b'\x04',     #protocol size
+            b'\x00\x01',     #opcode: arp request
+        ]
         self.oper_map = {1:'request', 2:'reply'}
-
-    def decodeHumanReadable(self):
-        self.opcode = int.from_bytes(self.op, byteorder='big', signed=False)
-
-        self.sender_mac = decodeMac(self.sender_hw_addr)
-        self.target_mac = decodeMac(self.target_hw_addr)
-
-        self.sender_ip = socket.inet_ntoa(self.sender_ip_addr)
-        self.target_ip = socket.inet_ntoa(self.target_ip_addr)
-
-        self.operation = self.oper_map[self.opcode] if (self.opcode in self.oper_map) else self.opcode
 
     def pretty(self):
         pretty_string = "[ARP]\t"
 
         # ARP request
-        if self.opcode == 1:
-            pretty_string += "Who has %s (%s)? Tell %s (%s)" % (self.target_ip, self.target_mac, self.sender_ip, self.sender_mac)
+        if self.getOpcode() == 1:
+            pretty_string += "Who has %s (%s)? Tell %s (%s)" % (self.getTargetIP(), self.getTargetMac(), self.getSenderIP(), self.getSenderMac())
         # ARP reply
         else:
-            pretty_string += "%s is at %s -> %s (%s)" % (self.sender_ip, self.sender_mac, self.target_ip, self.target_mac)
+            pretty_string += "%s is at %s -> %s (%s)" % (self.getSenderIP(), self.getSenderMac(), self.getTargetIP(), self.getTargetMac())
         return pretty_string
 
     #################################
 
     def getSenderMac(self):
-        return self.sender_mac;
+        return decodeMac(self.sender_hw_addr)
     
     def setSenderMac(self, sender_mac):
-        self.sender_mac = sender_mac
-        self.sender_hw_addr = encodeMac(self.sender_mac)
-        self.assemble()
+        self.sender_hw_addr = encodeMac(sender_mac)
 
 
     def getSenderIP(self):
-        return self.sender_ip;
+        return socket.inet_ntoa(self.sender_ip_addr)
     
     def setSenderIP(self, sender_ip):
-        self.sender_ip = sender_ip
-        self.sender_ip_addr = socket.inet_aton(self.sender_ip)
-        self.assemble()
+        self.sender_ip_addr = socket.inet_aton(sender_ip)
 
 
     def getTargetMac(self):
-        return self.target_mac;
+        return decodeMac(self.target_hw_addr)
     
     def setTargetMac(self, target_mac):
-        self.target_mac = target_mac
-        self.target_hw_addr = encodeMac(self.target_mac)
-        self.assemble()
+        self.target_hw_addr = encodeMac(target_mac)
 
 
     def getTargetIP(self):
-        return self.target_ip;
+        return socket.inet_ntoa(self.target_ip_addr)
     
     def setTargetIP(self, target_ip):
-        self.target_ip = target_ip
-        self.target_ip_addr = socket.inet_aton(self.target_ip)
-        self.assemble()
+        self.target_ip_addr = socket.inet_aton(target_ip)
 
 
-    def getOpCode(self):
-        return self.opcode
+    def getOpcode(self):
+        return int.from_bytes(self.op, byteorder='big', signed=False)
 
-    def setOpCode(self, opcode):
-        self.opcode = opcode
-        self.op = bytes([self.opcode])
-        self.assemble()
+    def setOpcode(self, opcode):
+        self.op = bytes([0, opcode])
+
+    def setOperation(self, operation='request'):
+        if operation == 'request':
+            self.setOpcode(1);
+        elif operation == 'response':
+            self.setOpcode(2);
+
+    def getOperation(self):
+        return self.oper_map[self.opcode] if (self.opcode in self.oper_map) else self.opcode
 
 #####################################
 

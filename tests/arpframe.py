@@ -1,12 +1,13 @@
 import unittest
+import tests.fixtures as fixtures
 from lib.frames import *
 
 class TestARPFrame(unittest.TestCase):
     def setUp(self):
-        self.raw_arp_request = b"\x00\x01\x08\x00\x06\x04\x00\x01\xac\x84\xc6Q\xe5\x8e\n\x00\x00\x01\x00\x00\x00\x00\x00\x00\n\x00\x00\xcb\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-        self.raw_arp_response = b"\x00\x01\x08\x00\x06\x04\x00\x02\xb8'\xebn\xd7\xfa\n\x00\x00\xcb\xac\x84\xc6Q\xe5\x8e\n\x00\x00\x01"
-        self.pretty_arp_request = "[ARP]\tWho has 10.0.0.203 (00:00:00:00:00:00)? Tell 10.0.0.1 (AC:84:C6:51:E5:8E)"
-        self.pretty_arp_response = "[ARP]\t10.0.0.203 is at B8:27:EB:6E:D7:FA -> 10.0.0.1 (AC:84:C6:51:E5:8E)"
+        self.raw_arp_request = fixtures.ARP_REQUEST_FRAME_RAW
+        self.raw_arp_response = fixtures.ARP_RESPONSE_FRAME_RAW
+        self.pretty_arp_request = fixtures.ARP_REQUEST_FRAME_PRETTY
+        self.pretty_arp_response = fixtures.ARP_RESPONSE_FRAME_PRETTY
 
         self.request_arpf = ARPFrame(self.raw_arp_request)
         self.request_sender_mac = self.request_arpf.getSenderMac()
@@ -30,6 +31,7 @@ class TestARPFrame(unittest.TestCase):
     def test_assemble_request(self):
         arpf = ARPFrame()
 
+        arpf.setOperation('request')
         arpf.setSenderMac(self.request_sender_mac)
         arpf.setTargetMac(self.request_target_mac)
         arpf.setSenderIP(self.request_sender_ip)
@@ -40,6 +42,7 @@ class TestARPFrame(unittest.TestCase):
     def test_assemble_response(self):
         arpf = ARPFrame()
 
+        arpf.setOperation('response')
         arpf.setSenderMac(self.response_sender_mac)
         arpf.setTargetMac(self.response_target_mac)
         arpf.setSenderIP(self.response_sender_ip)
