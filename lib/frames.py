@@ -56,7 +56,7 @@ class Frame():
 
 
 # Helper functions
-#-----------------
+#####################################
 
 def decodeMac(mac_binary):
     return "%02X:%02X:%02X:%02X:%02X:%02X" % unpackBinary(mac_binary)
@@ -68,17 +68,19 @@ def unpackBinary(data):
 def packBinary(data):
     data = [int(byte, 16) for byte in data]
     return struct.pack(str(len(data))+"B", *data)
+def binaryZeros(n):
+    return struct.pack(str(n)+'B', *([0]*n))
 
 
 # Frames
-#-----------------
+#####################################
 
 class BaseFrame():
     def __init__(self, raw_buffer=None):
         self.raw = raw_buffer if raw_buffer else b''
         self.setAttributes()
         for i, att in enumerate(self.att_names):
-            data = self.defaults[i] if len(self.defaults) > i else None
+            data = self.defaults[i] if hasattr(self, 'defaults') and len(self.defaults) > i else None
             setattr(self, att, data)
         if self.raw:
             self.parse()
@@ -95,6 +97,8 @@ class BaseFrame():
 
         if len(boundaries) == len(att_names):
             boundaries.append(None)
+        else:
+            self.raw = self.raw[:boundaries[-1]]
 
         for i in range(0, len(boundaries)-1):
             start = boundaries[i]
@@ -102,8 +106,8 @@ class BaseFrame():
             if parse:
                 setattr(self, att_names[i], self.raw[start:end])
             else:
-                zeros = struct.pack(str(end-start)+'B', *([0]*(end-start))) 
-                self.raw += getattr(self, att_names[i]) or zeros
+                end = end or start + len(att_names[i])
+                self.raw += getattr(self, att_names[i]) or binaryZeros(end-start)
     def assemble(self):
         self.process(parse=False)
 
@@ -118,6 +122,8 @@ class BaseFrame():
         return self.raw
 
 
+#####################################
+
 class EthFrame(BaseFrame):
     def setAttributes(self):
         conf = {
@@ -130,32 +136,47 @@ class EthFrame(BaseFrame):
         self.att_names = list(conf.keys())
         self.protocol_map = {'0x0806':"ARP", "0x0800":"IP"}
 
-    def decodeHumanReadable(self):
-        # human readable IP addresses
-        self.src_mac = decodeMac(self.src_mac_raw)
-        self.dst_mac = decodeMac(self.dst_mac_raw)
-        self.proto_code = "0x%02X%02X" % unpackBinary(self.type_raw)
-
-        # human readable protocol
-        if self.proto_code in self.protocol_map:
-            self.proto = self.protocol_map[self.proto_code]
-        else:
-            self.proto = self.proto_code
-
-    def encodeHumanReadable(self):
-        self.dst_mac_raw = encodeMac(self.dst_mac)
-        self.src_mac_raw = encodeMac(self.src_mac)
-
-        proto = self.proto_code
-        if proto.startswith('0x'):
-            proto = proto[2:]
-        self.type_raw = packBinary(proto)
-
     def pretty(self):
         pretty_string = "[ETH]"
-        if self.proto == self.proto_code:
-            pretty_string += "[%s]" % self.proto
-        return pretty_string+"\t(%s) -> (%s)" % (self.src_mac, self.dst_mac)
+        if self.getProto() == self.getProtoCode():
+            pretty_string += "[%s]" % self.getProto()
+        return pretty_string+"\t(%s) -> (%s)" % (self.getSrcMac(), self.getDstMac())
+
+    #################################
+
+    def getSrcMac(self):
+        return decodeMac(self.src_mac_raw)
+
+    def setSrcMac(self, mac):
+        self.src_mac_raw = encodeMac(mac)
+
+
+    def getDstMac(self):
+        return decodeMac(self.dst_mac_raw)
+
+    def setDstMac(self, mac):
+        self.dst_mac_raw = encodeMac(mac)
+
+
+    def getProtoCode(self):
+        return "0x%02X%02X" % unpackBinary(self.type_raw)
+
+    def getProto(self):
+        proto_code = self.getProtoCode()
+        return self.protocol_map[proto_code] if proto_code in self.protocol_map else proto_code
+
+    def setProtoCode(self, proto_code):
+        if proto_code.startswith('0x'):
+            proto_code = proto_code[2:]
+        self.type_raw = packBinary([str(int(''.join(proto_code[i:i+2]))) for i in range(0,len(proto_code),2)])
+
+
+    def setPayload(self, payload, raw=True):
+        self.payload = payload if raw else packBinary(payload)
+        if (len(payload) < 46):
+            self.payload += binaryZeros(46-len(payload))
+
+#####################################
 
 class ARPFrame(BaseFrame):
     def setAttributes(self):

@@ -1,8 +1,11 @@
 ETH_ARP_REQUEST_FRAME_RAW = b"\xb8'\xebn\xd7\xfa\xac\x84\xc6Q\xe5\x8e\x08\x06\x00\x01\x08\x00\x06\x04\x00\x01\xac\x84\xc6Q\xe5\x8e\n\x00\x00\x01\x00\x00\x00\x00\x00\x00\n\x00\x00\xcb\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-ETH_ARP_RESPONSE_FRAME_RAW = b"\xac\x84\xc6Q\xe5\x8e\xb8'\xebn\xd7\xfa\x08\x06\x00\x01\x08\x00\x06\x04\x00\x02\xb8'\xebn\xd7\xfa\n\x00\x00\xcb\xac\x84\xc6Q\xe5\x8e\n\x00\x00\x01"
+ETH_ARP_RESPONSE_FRAME_RAW = b"\xac\x84\xc6Q\xe5\x8e\xb8'\xebn\xd7\xfa\x08\x06\x00\x01\x08\x00\x06\x04\x00\x02\xb8'\xebn\xd7\xfa\n\x00\x00\xcb\xac\x84\xc6Q\xe5\x8e\n\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
-ETH_ARP_REQUEST_FRAME_PRETTY = "[ETH]   (AC:84:C6:51:E5:8E) -> (B8:27:EB:6E:D7:FA)\n[ARP]   Who has 10.0.0.203 (00:00:00:00:00:00)? Tell 10.0.0.1 (AC:84:C6:51:E5:8E)"
-ETH_ARP_REPONSE_FRAME_PRETTY = "[ETH]   (B8:27:EB:6E:D7:FA) -> (AC:84:C6:51:E5:8E)\n[ARP]   10.0.0.203 is at B8:27:EB:6E:D7:FA -> 10.0.0.1 (AC:84:C6:51:E5:8E)"
+ETH_ARP_REQUEST_FRAME_PRETTY = "[ETH]\t(AC:84:C6:51:E5:8E) -> (B8:27:EB:6E:D7:FA)\n[ARP]\tWho has 10.0.0.203 (00:00:00:00:00:00)? Tell 10.0.0.1 (AC:84:C6:51:E5:8E)"
+ETH_ARP_RESPONSE_FRAME_PRETTY = "[ETH]\t(B8:27:EB:6E:D7:FA) -> (AC:84:C6:51:E5:8E)\n[ARP]\t10.0.0.203 is at B8:27:EB:6E:D7:FA -> 10.0.0.1 (AC:84:C6:51:E5:8E)"
+
+ETH_REQUEST_FRAME_PRETTY = "[ETH]\t(AC:84:C6:51:E5:8E) -> (B8:27:EB:6E:D7:FA)"
+ETH_RESPONSE_FRAME_PRETTY = "[ETH]\t(B8:27:EB:6E:D7:FA) -> (AC:84:C6:51:E5:8E)"
 
 
 ARP_REQUEST_FRAME_RAW = b"\x00\x01\x08\x00\x06\x04\x00\x01\xac\x84\xc6Q\xe5\x8e\n\x00\x00\x01\x00\x00\x00\x00\x00\x00\n\x00\x00\xcb"
